@@ -1,0 +1,59 @@
+pipeline {
+    agent any
+
+    environment {
+        IMAGE_NAME = 'mywebapp'
+        DOCKERHUB_REPO = 'vipulv25/mywebapp'  // 🔁 replace with your Docker Hub repo
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git 'https://github.com/Vipulananda/Tomcat-project2.git' // 🔁 replace with your repo
+            }
+        }
+
+        stage('Build WAR') {
+            steps {
+                sh 'mvn clean package'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t $IMAGE_NAME .'
+            }
+        }
+
+        stage('Docker Hub Login & Push') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'dockerhub', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                        echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                        docker tag $IMAGE_NAME $DOCKERHUB_REPO
+                        docker push $DOCKERHUB_REPO
+                        docker logout
+                    '''
+                }
+            }
+        }
+
+        stage('Run Locally from Docker Hub Image') {
+            steps {
+                sh '''
+                    docker rm -f $IMAGE_NAME || true
+                    docker run -d --name $IMAGE_NAME -p 8080:8080 $DOCKERHUB_REPO
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Build, push, and deployment completed."
+        }
+        failure {
+            echo "❌ Something went wrong."
+        }
+    }
+}
